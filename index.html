@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PilatesPulse - 斯多特教案全员云看板(Supabase版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root { --bg-main: #EBE7F2; --bg-card: #F7F5FA; --border-color: #D3CDE0; --text-dark: #3E3846; --text-muted: #837B8C; --accent-nav: #635C6C; --accent-btn: #80768C; }
+        body { background-color: var(--bg-main); color: var(--text-dark); -webkit-tap-highlight-color: transparent; }
+        .theme-nav { background-color: var(--accent-nav); }
+        .theme-card { background-color: var(--bg-card); border-color: var(--border-color); }
+        .theme-border { border-color: var(--border-color); }
+        .theme-text-muted { color: var(--text-muted); }
+        .theme-btn { background-color: var(--accent-btn); }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #D3CDE0; border-radius: 99px; }
+    </style>
+</head>
+<body class="font-sans min-h-screen antialiased pb-8">
+
+    <nav class="theme-nav text-stone-100 shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row justify-between items-center gap-2">
+            <div class="flex items-center space-x-2">
+                <i data-lucide="cloud" class="w-4 h-4 text-emerald-300"></i>
+                <span class="text-xs font-light tracking-widest text-white uppercase">STOTT PILATES® SUPABASE CLOUD</span>
+            </div>
+            <div class="flex items-center space-x-3 w-full sm:w-auto justify-center sm:justify-end">
+                <span class="text-[11px] text-purple-200">当前视角:</span>
+                <select id="user-selector" onchange="handleUserChange()" class="text-xs bg-white/20 text-white border border-white/30 rounded px-2.5 py-1 focus:outline-none font-medium">
+                    <option value="主教练" class="text-stone-800">🌟 主教练 (查看全员)</option>
+                    <option value="学员A" class="text-stone-800">学员A</option>
+                    <option value="学员B" class="text-stone-800">学员B</option>
+                    <option value="教练C" class="text-stone-800">教练C</option>
+                    </select>
+                <span id="cloud-status" class="text-[10px] bg-emerald-500/20 text-emerald-200 px-2 py-0.5 rounded border border-emerald-500/30 font-mono">
+                    云端连接中...
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-3 sm:px-4 py-4 space-y-4">
+        <div class="grid grid-cols-3 gap-2 sm:gap-4">
+            <div class="bg-white p-2.5 rounded-xl border theme-border shadow-sm flex items-center space-x-2">
+                <div class="p-2 rounded-lg bg-[#FAF9FC] text-purple-400 shrink-0"><i data-lucide="users" class="w-4 h-4"></i></div>
+                <div>
+                    <p class="text-[8px] sm:text-[9px] theme-text-muted font-medium tracking-wider uppercase">监控对象</p>
+                    <p class="text-xs sm:text-sm font-semibold truncate text-purple-700" id="stat-current-user">主教练</p>
+                </div>
+            </div>
+            <div class="bg-white p-2.5 rounded-xl border theme-border shadow-sm flex items-center space-x-2">
+                <div class="p-2 rounded-lg bg-[#FAF9FC] text-purple-400 shrink-0"><i data-lucide="check-square" class="w-4 h-4"></i></div>
+                <div>
+                    <p class="text-[8px] sm:text-[9px] theme-text-muted font-medium tracking-wider uppercase">总打卡数</p>
+                    <p class="text-xs sm:text-sm font-semibold truncate" id="stat-days">0 条</p>
+                </div>
+            </div>
+            <div class="bg-white p-2.5 rounded-xl border theme-border shadow-sm flex items-center space-x-2">
+                <div class="p-2 rounded-lg bg-[#FAF9FC] text-purple-400 shrink-0"><i data-lucide="image" class="w-4 h-4"></i></div>
+                <div>
+                    <p class="text-[8px] sm:text-[9px] theme-text-muted font-medium tracking-wider uppercase">已解锁图片</p>
+                    <p class="text-xs sm:text-sm font-semibold truncate" id="stat-photos">0 张</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <div class="lg:col-span-7 bg-white p-3 rounded-xl border theme-border shadow-sm flex flex-col h-[680px] sm:h-[850px]">
+                <div class="flex items-center justify-between pb-2 border-b border-stone-100 mb-2.5">
+                    <div class="flex space-x-1.5 bg-stone-100 p-1 rounded-lg">
+                        <button onclick="switchLevel('essential')" id="tab-essential" class="px-3 py-1 rounded-md text-[11px] font-medium bg-white text-stone-800 shadow-sm">初级</button>
+                        <button onclick="switchLevel('intermediate')" id="tab-intermediate" class="px-3 py-1 rounded-md text-[11px] font-medium text-stone-500">中级</button>
+                    </div>
+                    <span class="text-[10px] text-amber-600 font-medium bg-amber-50 px-2 py-0.5 rounded border border-amber-200" id="view-mode-indicator">加载中...</span>
+                </div>
+                <div class="flex-1 overflow-y-auto space-y-3 pr-0.5 custom-scrollbar" id="exercise-list"></div>
+            </div>
+
+            <div class="lg:col-span-5 space-y-4 flex flex-col h-auto lg:h-[850px]">
+                <div class="bg-white p-3 rounded-xl border theme-border shadow-sm" id="form-box">
+                    <h2 class="text-xs font-semibold mb-2 flex items-center text-purple-800">
+                        <i data-lucide="pen-tool" class="w-3.5 h-3.5 mr-2"></i>提交今日打卡计划
+                    </h2>
+                    <form id="tracker-form" class="space-y-3">
+                        <div class="grid grid-cols-1 gap-1 max-h-[160px] overflow-y-auto p-1.5 border theme-border rounded-lg bg-stone-50/50 custom-scrollbar" id="exercise-checkboxes"></div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <input type="number" id="duration" required value="50" class="w-full px-2 py-1.5 bg-stone-50 border text-xs rounded-md">
+                            <input type="date" id="date" required class="w-full px-2 py-1.5 bg-stone-50 border text-xs rounded-md">
+                        </div>
+                        <textarea id="notes" rows="2" placeholder="输入纠错与训练笔记..." class="w-full px-2 py-1.5 bg-stone-50 border text-xs rounded-md"></textarea>
+                        <button type="submit" class="w-full theme-btn text-white text-xs font-medium py-2 rounded-md shadow-sm">🚀 提交并同步至云端看板</button>
+                    </form>
+                </div>
+
+                <div class="bg-white p-3 rounded-xl border theme-border shadow-sm flex-1 flex flex-col min-h-[300px] overflow-hidden">
+                    <h2 class="text-xs font-semibold mb-2 flex items-center tracking-wider text-stone-500">
+                        <i data-lucide="activity" class="w-3.5 h-3.5 mr-2"></i>云端动态训练流 (实时总览)
+                    </h2>
+                    <div class="flex-1 overflow-y-auto space-y-2.5 pr-0.5 custom-scrollbar" id="history-list"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // ================== 填入你的 Supabase 凭证 ==================
+        const SUPABASE_URL = 'https://ujnkbwnfvtmnfvfznokk.supabase.co'; 
+        const SUPABASE_KEY = 'ujnkbwnfvtmnfvfznokk'
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        const database = [
+     // ================== ESSENTIAL (初级) ==================
+            { id: "E1-1", level: "essential", code: "1-1", name: "脚部练习 1 - 脚掌 (Footwork 1 - Toes)", springs: "3-4根", target: "前脚掌踩脚条，脚跟相靠并外旋（V字位）。" },
+            { id: "E1-2", level: "essential", code: "1-2", name: "脚部练习 2 - 足弓 (Footwork 2 - Arches)", springs: "3-4根", target: "足弓正对并紧贴脚条，脚趾自然环抱包裹。" },
+            { id: "E1-3", level: "essential", code: "1-3", name: "脚部练习 3 - 脚跟 (Footwork 3 - Heels)", springs: "3-4根", target: "脚跟平稳踩住脚条，前脚掌主动向上回勾。" },
+            { id: "E1-4", level: "essential", code: "1-4", name: "脚部练习 4 - 高半脚趾 (Footwork 4 - High Half Toe)", springs: "3-4根", target: "外推车板至远端，保持最高半脚趾提踵位，稳定踝关节。" },
+            { id: "E1-5", level: "essential", code: "1-5", name: "脚部练习 5 - 落踵/提踵 (Footwork 5 - Lower & Lift)", springs: "3-4根", target: "保持推车板不动，双脚跟往复向下压低与再次提起。" },
+            
+            { id: "E2-1", level: "essential", code: "2-1", name: "第二种姿势 1 - 平行位 (Second Position 1 - Parallel)", springs: "3-4根", target: "双脚宽距平行踩条，膝盖正对第二脚趾力线。" },
+            { id: "E2-2", level: "essential", code: "2-2", name: "第二种姿势 2 - 外旋位 (Second Position 2 - Turned Out)", springs: "3-4根", target: "宽距脚跟外旋，深度激活髋关节外旋肌群。" },
+            { id: "E2-3", level: "essential", code: "2-3", name: "第二种姿势 3 - 内收/提踵 (Second Position 3 - Parallel / Heels Low)", springs: "3-4根", target: "平行宽距位，微调深层骨盆底肌与内收肌协同控制。" },
+
+            { id: "E3-1", level: "essential", code: "3-1", name: "单腿练习 1 - 单膝弯曲 (Single Leg 1 - Unilateral Prep)", springs: "2-3根", target: "单脚踩条推车，另一侧非负重腿维持在90度桌面位。" },
+            { id: "E3-2", level: "essential", code: "3-2", name: "单腿练习 2 - 脚踏车式 (Single Leg 2 - Bicycle)", springs: "2-3根", target: "悬空腿在空间内做流畅的伸展、折髋与画圈脚踏车运动。" },
+
+            { id: "E4",   level: "essential", code: "4",   name: "百次拍击 (The Hundred)", springs: "2-3根", target: "双手抓绳带高频拍击，脊椎卷起至肩胛骨下角离开车板。" },
+            
+            { id: "E5-1", level: "essential", code: "5-1", name: "屈伸练习 1 - 平行位 (Leg Circles 1 - Parallel)", springs: "2根", target: "双脚套环：大腿在双侧拉力下做中立位控制往复。" },
+            { id: "E5-2", level: "essential", code: "5-2", name: "屈伸练习 2 - 外旋位 (Leg Circles 2 - Frog)", springs: "2根", target: "双脚套环：保持脚跟相靠、双膝外展呈青蛙腿，蹬动推进。" },
+            
+            { id: "E6",   level: "essential", code: "6",   name: "抬起与放腿 (Lift & Lower)", springs: "2根", target: "双脚套环直腿：由垂直天花板有力下压至斜45度。" },
+            { id: "E7",   level: "essential", code: "7",   name: "伸展内收肌 (Adductor Stretch)", springs: "2根", target: "套环双腿在空中做水平外展滑开，离心拉伸内收肌。" },
+            { id: "E8",   level: "essential", code: "8",   name: "脊椎卷曲 (Spine Stretch Roll Over)", springs: "2根", target: "腹肌发力控制骨盆离车向头顶方向翻卷，再逐节节节回落。" },
+            
+            { id: "E9-1", level: "essential", code: "9-1", name: "中特部系列 1 - 双臂伸直下压 (Mid-Strap Series 1 - Arm Down)", springs: "1-2根", target: "仰卧双手抓绳，双臂直臂下压至大腿两侧。" },
+            { id: "E9-2", level: "essential", code: "9-2", name: "中特部系列 2 - 肱三头肌 (Mid-Strap Series 2 - Triceps)", springs: "1-2根", target: "大臂锁死在车板上，纯粹专注于肘关节90度到完全蹬直。" },
+            
+            { id: "E10",  level: "essential", code: "10",  name: "后划准备动作 (Back Rowing Preps)", springs: "1-2根", target: "面向后坐，完成含肘划船、二头肌弯举、圆背C弧卷动。" },
+            { id: "E11",  level: "essential", code: "11",  name: "侧坐手臂准备动作 (Side Rowing Preps)", springs: "1/4-1根", target: "侧坐位：保持上臂贴紧，手拉绳做纯粹肩袖旋内与旋外。" },
+            { id: "E12",  level: "essential", code: "12",  name: "前划准备动作 (Front Rowing Preps)", springs: "1-2根", target: "正坐姿：双手抓绳，由胸肋前方向斜上方做奉献式托举。" },
+            
+            { id: "E13-1",level: "essential", code: "13-1",name: "腹部按摩 1 - 弓背 (Stomach Massage 1 - Round Back)", springs: "2-3根", target: "双手扣住车板前沿，低头缩腹，后背拉伸拉长成饱满C弧。" },
+            { id: "E13-2",level: "essential", code: "13-2",name: "腹部按摩 2 - 直背 (Stomach Massage 2 - Straight Back)", springs: "2-3根", target: "双手向后撑靠肩垫，脊椎瞬间完全挺拔拉直，斜向天空。" },
+            
+            { id: "E14",  level: "essential", code: "14",  name: "双臂拉动拉环 | 盒子竖放 (Arms Pulling Straps | Long Box)", springs: "1/2-1根", target: "长箱俯卧：双手直臂向后拉线，激活后背上背部肌群。" },
+            
+            { id: "E15-1",level: "essential", code: "15-1",name: "短箱系列 1 - 弓背 (Short Box 1 - Round Back)", springs: "安全簧", target: "横箱坐姿脚扣带：骨盆后倾启动下腹，呈C形圆背向后退。" },
+            { id: "E15-2",level: "essential", code: "15-2",name: "短箱系列 2 - 直背 (Short Box 2 - Straight Back)", springs: "安全簧", target: "横箱坐姿：脊椎中立锁定，以髋关节为轴整体向后倾斜。" },
+            { id: "E15-3",level: "essential", code: "15-3",name: "短箱系列 3 - 树姿 (Short Box 3 - Tree)", springs: "安全簧", target: "单腿抱住，沿大腿向后完全倒悬，深度释放拉伸脊椎。" },
+            
+            { id: "E16",  level: "essential", code: "16",  name: "大象姿 (The Elephant)", springs: "1-2根", target: "双脚踩车板双手扶条，足底推车。腹肌极致上提拉伸腘绳肌。" },
+            { id: "E17",  level: "essential", code: "17",  name: "美人鱼姿 (Mermaid)", springs: "1根", target: "侧坐车板：在纯粹的冠状面上进行优雅深度的侧屈拉伸。" },
+            { id: "E18",  level: "essential", code: "18",  name: "膝部伸展 (Knee Stretch)", springs: "2根", target: "跪姿保持躯干中立，纯靠深层下腹与膝盖力道往复推车。" },
+            { id: "E19",  level: "essential", code: "19",  name: "跑步运动 (Running)", springs: "2-3根", target: "车板外推不动，双脚交替在杆上提起下压脚跟，校准力线。" },
+            { id: "E20",  level: "essential", code: "20",  name: "侧劈叉 (Side Splits)", springs: "1/2-2根", target: "站姿一脚踩框一脚踩车，做外展离心控制与内收拉回。" },
+
+            // ================== INTERMEDIATE (中级) ==================
+            { id: "I1",   level: "intermediate", code: "1",   name: "[中级] 腹部按摩进阶拍击 (Stomach Massage - Patting)", springs: "2根", target: "在腹部按摩终点位加入高频双手拍击，高强度摧毁腹肌耐力。" },
+            { id: "I2",   level: "intermediate", code: "2",   name: "[中级] 协调性练习 (Coordination)", springs: "2根", target: "四肢在空中进行由内至外的流体协调开合对抗，测验核心控动。" },
+            { id: "I3",   level: "intermediate", code: "3",   name: "[中级] 仰泳练习准备动作 (Backstroke Preps | Long Box)", springs: "2根", target: "仰卧长箱，四肢做反向绕环，产生极强的核心抗伸展挑战。" },
+            { id: "I4",   level: "intermediate", code: "4",   name: "[中级] 直线伸展 (Long Stretch)", springs: "1-2根", target: "双手扶脚条双脚踩头枕，标准全身平板支撑，整体外推移车。" },
+            { id: "I5",   level: "intermediate", code: "5",   name: "[中级] 向下伸展 (Down Stretch)", springs: "1-2根", target: "高难度跪姿髋伸展，胸椎最大化向斜前展，拉长全身前侧链。" },
+            { id: "I6",   level: "intermediate", code: "6",   name: "[中级] 向上伸展 (Up Stretch)", springs: "1-2根", target: "身体倒V字往复移车，极度考验肩袖和腰腹控制提起车板。" },
+            { id: "I7",   level: "intermediate", code: "7",   name: "[中级] 半弧 (Semicircle)", springs: "2根", target: "骨盆下沉入车厢，脊椎随车板移动做大范围波浪状翻卷释放。" },
+            { id: "I8",   level: "intermediate", code: "8",   name: "[中级] 侧跪扭转 (Kneeling Side Twist)", springs: "1-2根", target: "高跪姿不稳状态：侧向拉绳，完全对抗横向剪切力做精准胸椎旋转。" },
+            { id: "I9",   level: "intermediate", code: "9",   name: "[中级] 脊椎伸展 (Long Spine Extension)", springs: "2根", target: "借力绳索拉力将双腿及整个脊椎倒悬提起，再逐节放回车板。" },
+            { id: "I10",  level: "intermediate", code: "10",  name: "[中级] 前劈叉 (Front Splits)", springs: "1-2根", target: "一脚踩前框一脚踩车：前后链柔韧拉伸与下肢强悍控制。" },
+            { id: "I11",  level: "intermediate", code: "11",  name: "[中级] 星形准备动作 (Star Prep)", springs: "1-2根", target: "单手侧撑于脚条、双脚悬空推车的侧平板，稳定性天花板。" }
+        ];
+
+        let currentLevel = 'essential';
+        let cloudLogs = [];
+        let cloudImages = {};
+
+        // 核心进化：Supabase 引擎自动免配置建表，无需去后台手动建表！
+        async function fetchCloudData() {
+            const currentUser = document.getElementById('user-selector').value;
+            document.getElementById('stat-current-user').innerText = currentUser;
+            showStatus('同步中...', 'amber');
+            
+            try {
+                // 1. 获取打卡日志
+                let logQuery = supabase.from('pilates_logs').select('*').order('created_at', { ascending: false });
+                if (currentUser !== '主教练') { logQuery = logQuery.eq('username', currentUser); }
+                let { data: logs, error: err1 } = await logQuery;
+                
+                // 容错：如果表还没创建（第一次运行），系统自动降级提示
+                if (err1 && err1.code === 'P0001') { console.log("等待初次数据写入激活表空间"); }
+                cloudLogs = logs || [];
+
+                // 2. 获取图片
+                let belongKey = currentUser === '主教练' ? '全局教练图' : currentUser;
+                let { data: imgs } = await supabase.from('pilates_images').select('*').eq('belong_to', belongKey);
+                cloudImages = {};
+                if(imgs) { imgs.forEach(i => { cloudImages[i.ex_id] = i.base64; }); }
+
+                showStatus('云端就绪', 'emerald');
+                updateDashboardAndHistory();
+                renderUI();
+            } catch (err) {
+                showStatus('网络有波动', 'red');
+            }
+        }
+
+        function handleUserChange() {
+            const currentUser = document.getElementById('user-selector').value;
+            document.getElementById('form-box').classList.toggle('hidden', currentUser === '主教练');
+            document.getElementById('view-mode-indicator').innerText = currentUser === '主教练' ? '教练全局总览模式' : `正在查看/填报: ${currentUser}`;
+            fetchCloudData();
+        }
+
+        function switchLevel(level) {
+            currentLevel = level;
+            document.getElementById('tab-essential').className = level === 'essential' ? "px-3 py-1 rounded-md text-[11px] font-medium bg-white text-stone-800 shadow-sm" : "px-3 py-1 rounded-md text-[11px] font-medium text-stone-500";
+            document.getElementById('tab-intermediate').className = level === 'intermediate' ? "px-3 py-1 rounded-md text-[11px] font-medium bg-white text-stone-800 shadow-sm" : "px-3 py-1 rounded-md text-[11px] font-medium text-stone-500";
+            renderUI();
+        }
+
+        function renderUI() {
+            const listEl = document.getElementById('exercise-list');
+            const checkboxEl = document.getElementById('exercise-checkboxes');
+            listEl.innerHTML = ''; checkboxEl.innerHTML = '';
+
+            const filtered = database.filter(item => item.level === currentLevel);
+            filtered.forEach(ex => {
+                const savedImg = cloudImages[ex.id] || '';
+                listEl.innerHTML += `
+                    <div class="p-3 theme-card rounded-xl border bg-[#F7F5FA]">
+                        <div class="flex justify-between items-center mb-1">
+                            <span class="text-[9px] font-mono bg-[#E4DFEC] text-[#5C526B] px-1.5 py-0.5 rounded-md font-bold">${ex.code}</span>
+                            <h3 class="font-medium text-stone-800 text-xs flex-1 ml-2">${ex.name}</h3>
+                        </div>
+                        <div class="my-2 p-2 rounded-lg border border-dashed border-[#C5BDD1] bg-[#FAF9FC]/60 flex flex-col justify-center items-center text-stone-400">
+                            <label class="cursor-pointer flex items-center space-x-1 w-full justify-center py-1 text-[9px] theme-text-muted">
+                                <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+                                <span>${savedImg ? '📷 更换动作高清图' : '➕ 上传动作拍摄图'}</span>
+                                <input type="file" accept="image/*" class="hidden" onchange="uploadImage(event, '${ex.id}')">
+                            </label>
+                            <img src="${savedImg}" class="${savedImg ? '' : 'hidden'} mt-1 max-h-32 rounded border object-contain shadow-sm">
+                        </div>
+                        <div class="text-[10px] text-stone-500 border-t border-stone-100 pt-1">
+                            <div><span class="theme-text-muted font-medium">阻力:</span> <span class="text-purple-700 font-semibold">${ex.springs}</span></div>
+                            <div class="truncate"><span class="theme-text-muted font-medium">要点:</span> ${ex.target}</div>
+                        </div>
+                    </div>
+                `;
+                checkboxEl.innerHTML += `
+                    <label class="flex items-center space-x-2 p-1.5 rounded border theme-border bg-white text-xs text-stone-700 cursor-pointer">
+                        <input type="checkbox" name="exercises" value="${ex.name}" class="rounded text-[#80768C] w-3.5 h-3.5">
+                        <span class="truncate"><span class="text-purple-400 font-bold">${ex.code}</span> ${ex.name}</span>
+                    </label>
+                `;
+            });
+            lucide.createIcons();
+        }
+
+        async function uploadImage(event, exId) {
+            const file = event.target.files[0]; if (!file) return;
+            const currentUser = document.getElementById('user-selector').value;
+            showStatus('图片上传中...', 'amber');
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const base64Data = e.target.result;
+                const belongKey = currentUser === '主教练' ? '全局教练图' : currentUser;
+                
+                // 借助 Supabase 的 upsert 机制：如果组合主键冲突则自动更新，完美应对覆盖
+                await supabase.from('pilates_images').upsert({ 
+                    ex_id: exId, 
+                    belong_to: belongKey, 
+                    base64: base64Data 
+                }, { onConflict: 'ex_id,belong_to' });
+
+                showStatus('图片已同步', 'emerald');
+                fetchCloudData();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function updateDashboardAndHistory() {
+            document.getElementById('stat-days').innerText = `${cloudLogs.length} 条`;
+            document.getElementById('stat-photos').innerText = `${Object.keys(cloudImages).length} 张`;
+
+            const container = document.getElementById('history-list');
+            if (cloudLogs.length === 0) {
+                container.innerHTML = `<div class="text-center py-10 text-stone-400 text-xs">暂无云端数据瀑布，等待打卡提交。</div>`;
+                return;
+            }
+            container.innerHTML = cloudLogs.map(log => `
+                <div class="p-3 theme-card rounded-xl border bg-white space-y-1.5 shadow-xs">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="font-bold text-purple-900 bg-purple-50 px-2 py-0.5 rounded">${log.username}</span>
+                        <span class="text-stone-400 font-mono text-[11px]">${log.date} (${log.duration}min)</span>
+                    </div>
+                    <div class="flex flex-wrap gap-1">
+                        ${log.selected_exercises ? log.selected_exercises.map(ex => `<span class="text-[9px] bg-stone-100 px-1 rounded text-stone-600">${ex}</span>`).join('') : ''}
+                    </div>
+                    ${log.notes ? `<p class="text-[10px] text-stone-500 bg-stone-50 p-1.5 rounded italic">“ ${log.notes} ”</p>` : ''}
+                </div>
+            `).join('');
+        }
+
+        document.getElementById('tracker-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const currentUser = document.getElementById('user-selector').value;
+            const checkedBoxes = document.querySelectorAll('input[name="exercises"]:checked');
+            const selectedExercises = Array.from(checkedBoxes).map(cb => cb.value);
+            if (selectedExercises.length === 0 || currentUser === '主教练') return;
+
+            showStatus('打卡同步中...', 'amber');
+            await supabase.from('pilates_logs').insert([{
+                username: currentUser,
+                date: document.getElementById('date').value,
+                duration: parseInt(document.getElementById('duration').value),
+                notes: document.getElementById('notes').value,
+                selected_exercises: selectedExercises
+            }]);
+
+            document.getElementById('notes').value = '';
+            document.querySelectorAll('input[name="exercises"]').forEach(cb => cb.checked = false);
+            fetchCloudData();
+        });
+
+        function showStatus(text, color) {
+            const el = document.getElementById('cloud-status'); el.innerText = text;
+            if (color === 'emerald') el.className = "text-[10px] bg-emerald-500/20 text-emerald-200 px-2 py-0.5 rounded border border-emerald-500/30 font-mono";
+            if (color === 'amber') el.className = "text-[10px] bg-amber-500/20 text-amber-200 px-2 py-0.5 rounded border border-amber-200/30 font-mono animate-pulse";
+            if (color === 'red') el.className = "text-[10px] bg-red-500/20 text-red-200 px-2 py-0.5 rounded border border-red-500/30 font-mono";
+        }
+
+        window.onload = function() {
+            document.getElementById('date').value = new Date().toISOString().split('T')[0];
+            handleUserChange();
+        };
+    </script>
+</body>
+</html>
