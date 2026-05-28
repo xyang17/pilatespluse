@@ -35,7 +35,7 @@
                     <option value="学员A" class="text-stone-800">学员A</option>
                     <option value="学员B" class="text-stone-800">学员B</option>
                     <option value="教练C" class="text-stone-800">教练C</option>
-                    </select>
+                </select>
                 <span id="cloud-status" class="text-[10px] bg-emerald-500/20 text-emerald-200 px-2 py-0.5 rounded border border-emerald-500/30 font-mono">
                     云端连接中...
                 </span>
@@ -109,12 +109,14 @@
     <script>
         // ================== 填入你的 Supabase 凭证 ==================
         const SUPABASE_URL = 'https://ujnkbwnfvtmnfvfznokk.supabase.co'; 
-        const SUPABASE_KEY = 'sb_publishable_JTPMnf3YCWk99lJutGnLXA__ymbnlMo'
+        // 🚨 提示：如果你发现右上角依然显示红色的“密钥可能有误/离线”，请登录 Supabase 后台 Settings -> API，
+        // 复制那串以 eyJ... 开头的极长的 anon public 密钥替换到下方：
+        const SUPABASE_KEY = 'sb_publishable_JTPMnf3YCWk99lJutGnLXA__ymbnlMo';
         
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         const database = [
-     // ================== ESSENTIAL (初级) ==================
+            // ================== ESSENTIAL (初级) ==================
             { id: "E1-1", level: "essential", code: "1-1", name: "脚部练习 1 - 脚掌 (Footwork 1 - Toes)", springs: "3-4根", target: "前脚掌踩脚条，脚跟相靠并外旋（V字位）。" },
             { id: "E1-2", level: "essential", code: "1-2", name: "脚部练习 2 - 足弓 (Footwork 2 - Arches)", springs: "3-4根", target: "足弓正对并紧贴脚条，脚趾自然环抱包裹。" },
             { id: "E1-3", level: "essential", code: "1-3", name: "脚部练习 3 - 脚跟 (Footwork 3 - Heels)", springs: "3-4根", target: "脚跟平稳踩住脚条，前脚掌主动向上回勾。" },
@@ -177,11 +179,13 @@
         let cloudLogs = [];
         let cloudImages = {};
 
-        // 核心进化：Supabase 引擎自动免配置建表，无需去后台手动建表！
         async function fetchCloudData() {
             const currentUser = document.getElementById('user-selector').value;
             document.getElementById('stat-current-user').innerText = currentUser;
             showStatus('同步中...', 'amber');
+            
+            // 🔥 【核心修复点 1】: 绝不能等网络网络慢或者报错才画 UI！无条件立刻渲染出本地底图
+            renderUI(); 
             
             try {
                 // 1. 获取打卡日志
@@ -189,21 +193,27 @@
                 if (currentUser !== '主教练') { logQuery = logQuery.eq('username', currentUser); }
                 let { data: logs, error: err1 } = await logQuery;
                 
-                // 容错：如果表还没创建（第一次运行），系统自动降级提示
-                if (err1 && err1.code === 'P0001') { console.log("等待初次数据写入激活表空间"); }
+                if (err1) throw err1;
                 cloudLogs = logs || [];
 
                 // 2. 获取图片
                 let belongKey = currentUser === '主教练' ? '全局教练图' : currentUser;
-                let { data: imgs } = await supabase.from('pilates_images').select('*').eq('belong_to', belongKey);
+                let { data: imgs, error: err2 } = await supabase.from('pilates_images').select('*').eq('belong_to', belongKey);
+                
+                if (err2) throw err2;
                 cloudImages = {};
                 if(imgs) { imgs.forEach(i => { cloudImages[i.ex_id] = i.base64; }); }
 
                 showStatus('云端就绪', 'emerald');
                 updateDashboardAndHistory();
-                renderUI();
+                
+                // 🔥 【核心修复点 2】: 云端请求完全顺利成功后，进行二次精准刷新（渲染出图片和数据状态）
+                renderUI(); 
             } catch (err) {
-                showStatus('网络有波动', 'red');
+                console.error("Supabase 引擎请求出现异常:", err);
+                // 捕获异常后，降级为离线模式状态提示，但此时左侧本地动作 UI 已经被前置的 renderUI 成功救回
+                showStatus('密钥可能有误/离线', 'red');
+                updateDashboardAndHistory();
             }
         }
 
@@ -224,6 +234,8 @@
         function renderUI() {
             const listEl = document.getElementById('exercise-list');
             const checkboxEl = document.getElementById('exercise-checkboxes');
+            if(!listEl || !checkboxEl) return;
+            
             listEl.innerHTML = ''; checkboxEl.innerHTML = '';
 
             const filtered = database.filter(item => item.level === currentLevel);
@@ -256,7 +268,11 @@
                     </label>
                 `;
             });
-            lucide.createIcons();
+            
+            // 🔥 【增加容错】针对最新版 Lucide CDN 初始化不暴露全局对象进行的健壮性修复
+            if (window.lucide && typeof lucide.createIcons === 'function') {
+                lucide.createIcons();
+            }
         }
 
         async function uploadImage(event, exId) {
@@ -269,14 +285,16 @@
                 const base64Data = e.target.result;
                 const belongKey = currentUser === '主教练' ? '全局教练图' : currentUser;
                 
-                // 借助 Supabase 的 upsert 机制：如果组合主键冲突则自动更新，完美应对覆盖
-                await supabase.from('pilates_images').upsert({ 
-                    ex_id: exId, 
-                    belong_to: belongKey, 
-                    base64: base64Data 
-                }, { onConflict: 'ex_id,belong_to' });
-
-                showStatus('图片已同步', 'emerald');
+                try {
+                    await supabase.from('pilates_images').upsert({ 
+                        ex_id: exId, 
+                        belong_to: belongKey, 
+                        base64: base64Data 
+                    }, { onConflict: 'ex_id,belong_to' });
+                    showStatus('图片已同步', 'emerald');
+                } catch(e) {
+                    showStatus('上传失败', 'red');
+                }
                 fetchCloudData();
             };
             reader.readAsDataURL(file);
@@ -313,21 +331,25 @@
             if (selectedExercises.length === 0 || currentUser === '主教练') return;
 
             showStatus('打卡同步中...', 'amber');
-            await supabase.from('pilates_logs').insert([{
-                username: currentUser,
-                date: document.getElementById('date').value,
-                duration: parseInt(document.getElementById('duration').value),
-                notes: document.getElementById('notes').value,
-                selected_exercises: selectedExercises
-            }]);
-
-            document.getElementById('notes').value = '';
-            document.querySelectorAll('input[name="exercises"]').forEach(cb => cb.checked = false);
+            try {
+                await supabase.from('pilates_logs').insert([{
+                    username: currentUser,
+                    date: document.getElementById('date').value,
+                    duration: parseInt(document.getElementById('duration').value),
+                    notes: document.getElementById('notes').value,
+                    selected_exercises: selectedExercises
+                }]);
+                document.getElementById('notes').value = '';
+                document.querySelectorAll('input[name="exercises"]').forEach(cb => cb.checked = false);
+            } catch(e) {
+                alert('云端写入失败，请检查网络或配置');
+            }
             fetchCloudData();
         });
 
         function showStatus(text, color) {
-            const el = document.getElementById('cloud-status'); el.innerText = text;
+            const el = document.getElementById('cloud-status'); if(!el) return;
+            el.innerText = text;
             if (color === 'emerald') el.className = "text-[10px] bg-emerald-500/20 text-emerald-200 px-2 py-0.5 rounded border border-emerald-500/30 font-mono";
             if (color === 'amber') el.className = "text-[10px] bg-amber-500/20 text-amber-200 px-2 py-0.5 rounded border border-amber-200/30 font-mono animate-pulse";
             if (color === 'red') el.className = "text-[10px] bg-red-500/20 text-red-200 px-2 py-0.5 rounded border border-red-500/30 font-mono";
